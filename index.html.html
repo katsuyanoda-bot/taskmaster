@@ -1,0 +1,946 @@
+import React, { useState, useMemo } from 'react';
+import { 
+  Plus, 
+  Calendar, 
+  User, 
+  CheckCircle, 
+  ChevronRight, 
+  Info, 
+  Lock, 
+  MessageSquare, 
+  PlayCircle, 
+  Check, 
+  ExternalLink, 
+  Clock, 
+  ArrowRight, 
+  Link as LinkIcon,
+  Edit2, 
+  Trash2, 
+  X,
+  Flag,
+  Pin
+} from 'lucide-react';
+
+// --- 初期プロジェクトメタデータ ---
+const projectData = {
+  id: 'p1',
+  name: '【ECD】ダイレクトスカウト無料化プラン実装',
+  code: 'ECD-2026-Q2',
+  startDate: '2026-05-15',
+  endDate: '2026-06-25',
+  specifications: {
+    target: '全法人アカウント（新規・既存問わず）',
+    condition: '月間〇〇通まで無料、超過分は従量課金',
+    kintone: '専用の「無料枠管理アプリ」を新設予定',
+  }
+};
+
+// 1. 各STEP（最上位の大工程）の定義
+const initialSteps = [
+  { id: 1, name: '企画・ゴール合意', desc: '無料化の基本方針策定と全体確認' },
+  { id: 2, name: '各部門検証 (並行)', desc: '経理・法務・システム等の並行調整' },
+  { id: 3, name: '運用・条件構築 (自分)', desc: '事務フロー整備、kintone反映' }
+];
+
+// 2. タスク（商品設計における論点や調整実務）
+const initialTasks = [
+  {
+    id: 't1',
+    stepId: 1,
+    title: '無料化のゴールとスコープの全体確認',
+    description: '既存顧客と新規顧客の双方を対象とした、ダイレクトスカウトの一定枠無料化プラン。全体の合意を得る。',
+    assignee: '営業 (山田)',
+    department: 'sales',
+    dueDate: '2026-05-18',
+    status: 'completed',
+    isHighPriority: false,
+    contextLogs: [
+      { id: 'c1', date: '2026-05-18 15:30', text: 'キックオフ合意。無料枠通数の基本方針を決定しました。', link: { label: 'キックオフ議事録', url: '#' }, completed: true, to: '全員', dueDate: '2026-05-18', isHighlighted: true }
+    ]
+  },
+  {
+    id: 't2',
+    stepId: 2,
+    title: '経理上の問題・収益認識の確認',
+    description: '無料枠超過分の請求タイミングと、既存有料プランからの切り替え時の売上計上基準（収益認識基準）の策定。',
+    assignee: '経理 (田中)',
+    department: 'finance',
+    dueDate: '2026-05-25',
+    status: 'in_progress',
+    isHighPriority: true,
+    contextLogs: [
+      { id: 'c2', date: '2026-05-20 10:00', text: '現在、監査法人に「無料枠から有料枠への切り替え時」の収益認識基準について見解を確認中。来週火曜に回答予定。', link: { label: '相談用スレッド', url: '#' }, completed: false, to: '経理 (田中)', dueDate: '2026-05-25', isHighlighted: true }
+    ]
+  },
+  {
+    id: 't3',
+    stepId: 2,
+    title: '法務上の問題・利用規約改定の確認',
+    description: '既存顧客への不利益変更にあたらないかの確認。同意の取り直しが必要な場合のフロー確認。',
+    assignee: '法務 (鈴木)',
+    department: 'legal',
+    dueDate: '2026-05-27',
+    status: 'in_progress',
+    isHighPriority: false,
+    contextLogs: [
+      { id: 'c3', date: '2026-05-21 13:00', text: '利用規約の特定条項のドラフト改定を開始。同意取得は電子契約を想定して設計。', link: { label: '#ecd-legal-check', url: '#' }, completed: false, to: '法務 (鈴木)', dueDate: '2026-05-27', isHighlighted: false },
+      { id: 'c3-prev', date: '2026-05-20 16:00', text: '営業部とのすり合わせ開始。', link: null, completed: true, to: '営業 (山田)', dueDate: null, isHighlighted: false }
+    ]
+  },
+  {
+    id: 't4',
+    stepId: 2,
+    title: 'システム上の問題・API連携の確認',
+    description: 'プロダクト側での無料スカウト通数のカウントおよび、超過時の従量課金システム連携ロジックの実装検証。',
+    assignee: 'システム (伊藤)',
+    department: 'system',
+    dueDate: '2026-05-22',
+    status: 'completed',
+    isHighPriority: false,
+    contextLogs: [
+      { id: 'c4', date: '2026-05-20 15:00', text: '既存のバッチ処理を改修すれば対応可能と判断。工数1.5人月。', link: null, completed: true, to: null, dueDate: null, isHighlighted: false }
+    ]
+  },
+  {
+    id: 't5',
+    stepId: 3,
+    title: '申込書・見積フォーマットの整備',
+    description: '無料枠記載を含めた新しい申込書テンプレートの作成、および法務特約事項の作成。',
+    assignee: '自分 (事務)',
+    department: 'backoffice',
+    dueDate: '2026-06-05',
+    status: 'blocked',
+    isHighPriority: true,
+    contextLogs: [
+      { id: 'c5', date: '2026-05-20 11:00', text: '経理側のルールが決まり次第、見積フォーマットの変更に着手する。', link: null, completed: false, to: '自分 (事務)', dueDate: '2026-05-22', isHighlighted: false }
+    ]
+  },
+  {
+    id: 't6',
+    stepId: 3,
+    title: '社内システム（kintone）反映',
+    description: '無料スカウト枠管理用フィールドの新設と、他システムとのマスタ連携テスト。',
+    assignee: '自分 (事務)',
+    department: 'backoffice',
+    dueDate: '2026-06-15',
+    status: 'pending',
+    isHighPriority: false,
+    contextLogs: []
+  }
+];
+
+// 部署ごとのイメージカラー (経理: 黄色/Amber, 法務: 濃い緑/Green, 事務: 紫/Purple, 営業: 青/Blue)
+const deptColors = {
+  sales: 'text-blue-700 bg-blue-50 border-blue-200',
+  finance: 'text-amber-800 bg-amber-50 border-amber-300', 
+  legal: 'text-green-800 bg-green-50 border-green-300',
+  backoffice: 'text-purple-700 bg-purple-50 border-purple-200', 
+  system: 'text-slate-600 bg-slate-50 border-slate-200'
+};
+
+export default function App() {
+  const [tasks, setTasks] = useState(initialTasks);
+  const [isEditingSpec, setIsEditingSpec] = useState(false);
+
+  // 新規メモ（状況ログ）追加用の一時State
+  const [addingLogTaskId, setAddingLogTaskId] = useState(null);
+  const [newLogText, setNewLogText] = useState('');
+  const [newLogTo, setNewLogTo] = useState(''); 
+  const [newLogDueDate, setNewLogDueDate] = useState(''); 
+  const [newLinkLabel, setNewLinkLabel] = useState('');
+  const [newLinkUrl, setNewLinkUrl] = useState('');
+
+  // メモ（状況ログ）の個別インライン編集用State
+  const [editingLogId, setEditingLogId] = useState(null);
+  const [editLogText, setEditLogText] = useState('');
+  const [editLogTo, setEditLogTo] = useState('');
+  const [editLogDueDate, setEditLogDueDate] = useState('');
+  const [editLogLinkLabel, setEditLogLinkLabel] = useState('');
+  const [editLogLinkUrl, setEditLogLinkUrl] = useState('');
+
+  // 新規タスク追加フォーム用
+  const [addingTaskStepId, setAddingTaskStepId] = useState(null);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDesc, setNewTaskDesc] = useState('');
+  const [newTaskDept, setNewTaskDept] = useState('backoffice');
+  const [newTaskAssignee, setNewTaskAssignee] = useState('自分 (事務)');
+  const [newTaskDueDate, setNewTaskDueDate] = useState('2026-06-10');
+
+  // タスクカード自体のインライン編集
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+
+  // 1. 期日超過判定ヘルパー (Reactレンダーエラーを防ぐためApp最上部に配置)
+  const isOverdue = (dueDate, status) => {
+    if (status === 'completed') return false;
+    return new Date(dueDate) < new Date('2026-05-21'); // デモ上の今日の日付を 2026-05-21 と想定
+  };
+
+  // 2. プロジェクト全体の完了率
+  const projectProgress = useMemo(() => {
+    if (tasks.length === 0) return 0;
+    const completed = tasks.filter(t => t.status === 'completed').length;
+    return Math.round((completed / tasks.length) * 100);
+  }, [tasks]);
+
+  // 3. 各STEPの進捗率を計算する
+  const getStepProgress = (stepId) => {
+    const stepTasks = tasks.filter(t => t.stepId === stepId);
+    if (stepTasks.length === 0) return 0;
+    const completed = stepTasks.filter(t => t.status === 'completed').length;
+    return Math.round((completed / stepTasks.length) * 100);
+  };
+
+  // --- 時系列メモ操作 (追加・完了・削除・部分クリア) ---
+  const addLog = (taskId) => {
+    if (!newLogText.trim()) return;
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const newLink = newLinkUrl.trim() ? {
+      label: newLinkLabel.trim() || 'リンク',
+      url: newLinkUrl.trim()
+    } : null;
+
+    const newLog = {
+      id: `l_${Date.now()}`,
+      date: dateStr,
+      text: newLogText.trim(),
+      link: newLink,
+      to: newLogTo.trim() || null,
+      dueDate: newLogDueDate || null,
+      completed: false,
+      isHighlighted: false
+    };
+
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        return {
+          ...t,
+          contextLogs: [newLog, ...(t.contextLogs || [])]
+        };
+      }
+      return t;
+    }));
+
+    setAddingLogTaskId(null);
+    setNewLogText('');
+    setNewLinkLabel('');
+    setNewLinkUrl('');
+    setNewLogTo('');
+    setNewLogDueDate('');
+  };
+
+  const toggleLogComplete = (taskId, logId) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        return {
+          ...t,
+          contextLogs: (t.contextLogs || []).map(l => l.id === logId ? { ...l, completed: !l.completed } : l)
+        };
+      }
+      return t;
+    }));
+  };
+
+  const deleteLog = (taskId, logId) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        return {
+          ...t,
+          contextLogs: (t.contextLogs || []).filter(l => l.id !== logId)
+        };
+      }
+      return t;
+    }));
+  };
+
+  // メモ内の特定項目（TO、期日、リンク）の部分削除・クリア
+  const clearLogField = (taskId, logId, field) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        return {
+          ...t,
+          contextLogs: (t.contextLogs || []).map(l => {
+            if (l.id === logId) {
+              return { ...l, [field]: null };
+            }
+            return l;
+          })
+        };
+      }
+      return t;
+    }));
+  };
+
+  // メモの重要度（ピン留め・強調表示）切り替え
+  const toggleLogHighlight = (taskId, logId) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        return {
+          ...t,
+          contextLogs: (t.contextLogs || []).map(l => l.id === logId ? { ...l, isHighlighted: !l.isHighlighted } : l)
+        };
+      }
+      return t;
+    }));
+  };
+
+  // --- メモ編集モード開始・保存 ---
+  const startEditingLog = (log) => {
+    setEditingLogId(log.id);
+    setEditLogText(log.text);
+    setEditLogTo(log.to || '');
+    setEditLogDueDate(log.dueDate || '');
+    setEditLogLinkLabel(log.link ? log.link.label : '');
+    setEditLogLinkUrl(log.link ? log.link.url : '');
+  };
+
+  const saveLogEdit = (taskId, logId) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        return {
+          ...t,
+          contextLogs: (t.contextLogs || []).map(l => {
+            if (l.id === logId) {
+              const updatedLink = editLogLinkUrl.trim() ? {
+                label: editLogLinkLabel.trim() || 'リンク',
+                url: editLogLinkUrl.trim()
+              } : null;
+              return {
+                ...l,
+                text: editLogText.trim(),
+                to: editLogTo.trim() || null,
+                dueDate: editLogDueDate || null,
+                link: updatedLink
+              };
+            }
+            return l;
+          })
+        };
+      }
+      return t;
+    }));
+    setEditingLogId(null);
+  };
+
+  // --- タスク操作 (ステータス変更・完了タイムスタンプ) ---
+  const changeTaskStatus = (taskId, newStatus) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        const updated = { ...t, status: newStatus };
+        if (newStatus === 'completed' && t.status !== 'completed') {
+          const now = new Date();
+          const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+          updated.contextLogs = [{ id: `sys_${Date.now()}`, date: dateStr, text: '✅ タスクを完了しました。', link: null, completed: true, isSystem: true, to: null, dueDate: null, isHighlighted: false }, ...(t.contextLogs || [])];
+        }
+        return updated;
+      }
+      return t;
+    }));
+  };
+
+  // --- タスクの「最優先 ⭐」トグル ---
+  const toggleTaskPriority = (taskId) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        return { ...t, isHighPriority: !t.isHighPriority };
+      }
+      return t;
+    }));
+  };
+
+  // --- タスク削除 ---
+  const deleteTask = (taskId) => {
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+  };
+
+  // --- 新規タスクの追加 ---
+  const handleAddTask = (stepId, e) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim()) return;
+
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const newTask = {
+      id: `t_${Date.now()}`,
+      stepId: stepId,
+      title: newTaskTitle.trim(),
+      description: newTaskDesc.trim() || '詳細はありません。',
+      assignee: newTaskAssignee.trim(),
+      department: newTaskDept,
+      dueDate: newTaskDueDate || todayStr,
+      status: 'pending',
+      isHighPriority: false,
+      contextLogs: []
+    };
+
+    setTasks(prev => [...prev, newTask]);
+    setNewTaskTitle('');
+    setNewTaskDesc('');
+    setAddingTaskStepId(null);
+  };
+
+  // --- タスクの編集開始 ---
+  const startEditing = (task) => {
+    setEditingTaskId(task.id);
+    setEditFormData({
+      title: task.title,
+      description: task.description || '',
+      assignee: task.assignee,
+      department: task.department,
+      dueDate: task.dueDate
+    });
+  };
+
+  const saveEdit = (taskId) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        return {
+          ...t,
+          title: editFormData.title,
+          description: editFormData.description,
+          assignee: editFormData.assignee,
+          department: editFormData.department,
+          dueDate: editFormData.dueDate
+        };
+      }
+      return t;
+    }));
+    setEditingTaskId(null);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased pb-12">
+      
+      {/* 1. 最上部ナビゲーションヘッダー */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 px-6 py-3 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="bg-purple-600 text-white p-1.5 rounded-lg font-bold text-lg shadow-sm">PL</div>
+          <div>
+            <h1 className="text-base font-extrabold text-slate-800 leading-tight">Project Loom</h1>
+            <p className="text-[10px] text-slate-400 font-medium">マイ・プロジェクト ECDダッシュボード</p>
+          </div>
+        </div>
+
+        {/* 進捗プログレス */}
+        <div className="flex items-center gap-4 bg-slate-50 p-2 rounded-xl border border-slate-200">
+          <div className="text-right">
+            <span className="text-[10px] text-slate-400 font-bold block leading-none mb-1">全体完了率</span>
+            <span className="text-xs font-bold text-slate-600">{projectData.code}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-32 bg-slate-200 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-indigo-500 transition-all duration-500" 
+                style={{ width: `${projectProgress}%` }}
+              ></div>
+            </div>
+            <span className="text-xs font-extrabold text-indigo-600">{projectProgress}%</span>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto p-6 space-y-6">
+
+        {/* 2. プロジェクト概要 ＆ 最新合意・仕様（アコーディオン） */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
+          <div className="flex-1 w-full space-y-2">
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Clock className="h-3.5 w-3.5"/>
+              <span>期間: {projectData.startDate} 〜 {projectData.endDate} (目標)</span>
+            </div>
+            <h2 className="text-xl font-extrabold text-slate-800 leading-tight">{projectData.name}</h2>
+          </div>
+          
+          <div className="w-full md:w-auto md:max-w-md bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+            <button 
+              onClick={() => setIsEditingSpec(!isEditingSpec)}
+              className="flex justify-between items-center w-full gap-4 text-xs font-bold text-slate-600 hover:text-indigo-600 transition"
+            >
+              <span className="flex items-center gap-1.5">
+                <Info className="h-4 w-4 text-indigo-500"/> 最新合意・仕様（ここをクリックで展開）
+              </span>
+              <ChevronRight className={`h-4 w-4 transition-transform ${isEditingSpec ? 'rotate-90' : ''}`} />
+            </button>
+            {isEditingSpec && (
+              <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-1 gap-2 text-xs text-slate-600 leading-relaxed">
+                <div><span className="text-slate-400 block font-bold">対象範囲</span>{projectData.specifications.target}</div>
+                <div><span className="text-slate-400 block font-bold">無料枠条件</span>{projectData.specifications.condition}</div>
+                <div><span className="text-slate-400 block font-bold">kintone改修</span>{projectData.specifications.kintone}</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 3. STEPカードコンテナ（縦並びの大工程セクション） */}
+        <div className="space-y-8">
+          {initialSteps.map(step => {
+            const stepTasks = tasks.filter(t => t.stepId === step.id);
+            const stepProgress = getStepProgress(step.id);
+
+            return (
+              <div key={step.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                
+                {/* STEPのヘッダー */}
+                <div className="p-4 bg-slate-50/50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-purple-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded">STEP {step.id}</span>
+                      <h3 className="font-extrabold text-sm text-slate-800">{step.name}</h3>
+                    </div>
+                    <p className="text-xs text-slate-400">{step.desc}</p>
+                  </div>
+                  
+                  {/* STEP個別の進捗率とタスク作成ボタン */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">STEP進捗</span>
+                      <div className="h-2 w-20 bg-slate-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-purple-500 transition-all duration-300" style={{ width: `${stepProgress}%` }}></div>
+                      </div>
+                      <span className="text-xs font-bold text-purple-700">{stepProgress}%</span>
+                    </div>
+
+                    {addingTaskStepId !== step.id && (
+                      <button 
+                        onClick={() => setAddingTaskStepId(step.id)}
+                        className="bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 font-bold text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> タスク追加
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 新規タスク追加フォーム（STEPごと） */}
+                {addingTaskStepId === step.id && (
+                  <form onSubmit={(e) => handleAddTask(step.id, e)} className="p-4 bg-purple-50/20 border-b border-purple-100 space-y-3 text-xs animate-in fade-in">
+                    <div className="flex justify-between items-center">
+                      <span className="font-extrabold text-purple-800">➕ STEP {step.id} に新規タスクを追加</span>
+                      <button type="button" onClick={() => setAddingTaskStepId(null)} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="space-y-3">
+                        <input required type="text" placeholder="タスク名を入力..." value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} className="w-full border border-slate-200 bg-white rounded p-2 text-slate-700" />
+                        <textarea placeholder="詳細論点・説明を記入..." value={newTaskDesc} onChange={e => setNewTaskDesc(e.target.value)} className="w-full border border-slate-200 bg-white rounded p-2 text-slate-700" rows={2} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 self-start">
+                        <div>
+                          <label className="block text-slate-500 mb-1">担当部署</label>
+                          <select value={newTaskDept} onChange={e => {
+                            const dept = e.target.value;
+                            let defaultName = '担当者';
+                            if (dept === 'backoffice') defaultName = '自分 (事務)';
+                            if (dept === 'sales') defaultName = '営業 (山田)';
+                            if (dept === 'finance') defaultName = '経理 (田中)';
+                            if (dept === 'legal') defaultName = '法務 (鈴木)';
+                            if (dept === 'system') defaultName = 'システム (伊藤)';
+                            setNewTaskDept(dept);
+                            setNewTaskAssignee(defaultName);
+                          }} className="w-full border border-slate-200 rounded p-1.5 bg-white text-slate-700">
+                            <option value="backoffice">自分 (事務)</option>
+                            <option value="sales">営業</option>
+                            <option value="finance">経理</option>
+                            <option value="legal">法務</option>
+                            <option value="system">システム</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-500 mb-1">担当者名</label>
+                          <input type="text" value={newTaskAssignee} onChange={e => setNewTaskAssignee(e.target.value)} className="w-full border border-slate-200 rounded p-1.5 text-slate-700" />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-slate-500 mb-1">期日</label>
+                          <input type="date" value={newTaskDueDate} onChange={e => setNewTaskDueDate(e.target.value)} className="w-full border border-slate-200 rounded p-1.5 text-slate-700 font-mono" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2 border-t border-purple-100">
+                      <button type="button" onClick={() => setAddingTaskStepId(null)} className="bg-slate-100 text-slate-500 px-3 py-1 rounded">キャンセル</button>
+                      <button type="submit" className="bg-purple-600 text-white px-4 py-1 rounded font-bold">作成する</button>
+                    </div>
+                  </form>
+                )}
+
+                {/* 各STEP配下のタスク一覧カードグリッド */}
+                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {stepTasks.length > 0 ? (
+                    stepTasks.map(task => {
+                      const isBlocked = task.status === 'blocked';
+                      const isCompleted = task.status === 'completed';
+                      const isInProgress = task.status === 'in_progress';
+                      const isLate = isOverdue(task.dueDate, task.status);
+                      const deptColor = deptColors[task.department] || deptColors.system;
+                      const sortedLogs = task.contextLogs ? [...task.contextLogs].sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
+
+                      return (
+                        <div 
+                          key={task.id}
+                          className={`group relative border rounded-2xl p-4 transition-all flex flex-col justify-between shadow-xs ${
+                            isCompleted ? 'border-slate-200 opacity-60 bg-slate-50/40' : 
+                            task.isHighPriority 
+                              ? 'border-amber-300 ring-2 ring-amber-400/20 bg-gradient-to-br from-amber-50/20 via-white to-white border-l-8 border-l-amber-500 shadow-md'
+                              : isBlocked ? 'border-l-4 border-l-slate-400 border-slate-200 bg-slate-50/20' : 
+                              isInProgress ? `border-indigo-200 border-l-4 ${task.isMyTask ? 'border-l-purple-500' : 'border-l-indigo-500'} shadow-sm` :
+                              isLate ? 'border-rose-300 border-l-4 border-l-rose-500' :
+                              `border-slate-200 border-l-4 ${task.isMyTask ? 'border-l-purple-400' : 'border-l-slate-300'}`
+                          }`}
+                        >
+                          
+                          {/* 編集・削除・最優先トグルのホバーメニュー */}
+                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-white/95 rounded p-0.5 shadow-sm border border-slate-100 z-10">
+                            {!isCompleted && (
+                              <button 
+                                onClick={() => toggleTaskPriority(task.id)}
+                                className={`p-1 rounded transition ${task.isHighPriority ? 'text-amber-500 bg-amber-50' : 'text-slate-300 hover:text-amber-500'}`}
+                                title={task.isHighPriority ? '最優先を解除' : '最優先論点に設定'}
+                              >
+                                <Flag className="h-3.5 w-3.5 fill-current" />
+                              </button>
+                            )}
+                            {!isCompleted && editingTaskId !== task.id && (
+                              <button onClick={() => startEditing(task)} className="p-1 text-slate-400 hover:text-indigo-600 rounded hover:bg-slate-50 transition" title="編集">
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            <button onClick={() => deleteTask(task.id)} className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 transition" title="削除">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+
+                          {/* 1. タスクインライン編集モード */}
+                          {editingTaskId === task.id ? (
+                            <div className="space-y-3 text-xs w-full">
+                              <span className="font-extrabold text-indigo-600 block mb-1">✏️ タスクの編集</span>
+                              <input 
+                                type="text" 
+                                value={editFormData.title} 
+                                onChange={e => setEditFormData({...editFormData, title: e.target.value})}
+                                className="w-full font-bold border border-slate-300 rounded p-1.5 focus:border-indigo-500 focus:outline-none"
+                              />
+                              <textarea 
+                                value={editFormData.description} 
+                                onChange={e => setEditFormData({...editFormData, description: e.target.value})}
+                                className="w-full border border-slate-300 rounded p-1.5 focus:border-indigo-500 focus:outline-none"
+                                rows={2}
+                              />
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] text-slate-400 font-bold block mb-0.5">担当部署</label>
+                                  <select 
+                                    value={editFormData.department} 
+                                    onChange={e => setEditFormData({...editFormData, department: e.target.value})}
+                                    className="w-full border border-slate-300 rounded p-1"
+                                  >
+                                    <option value="sales">営業</option>
+                                    <option value="finance">経理</option>
+                                    <option value="legal">法務</option>
+                                    <option value="system">システム</option>
+                                    <option value="backoffice">自分 (事務)</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-slate-400 font-bold block mb-0.5">期日</label>
+                                  <input 
+                                    type="date" 
+                                    value={editFormData.dueDate} 
+                                    onChange={e => setEditFormData({...editFormData, dueDate: e.target.value})}
+                                    className="w-full border border-slate-300 rounded p-1"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex justify-end gap-1.5 pt-2 border-t border-slate-100">
+                                <button onClick={() => setEditingTaskId(null)} className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded">戻る</button>
+                                <button onClick={() => saveEdit(task.id)} className="bg-indigo-600 text-white px-3 py-0.5 rounded font-bold">保存</button>
+                              </div>
+                            </div>
+                          ) : (
+                            // 2. タスク通常表示
+                            <div className="space-y-3 flex-1 flex flex-col justify-between">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${deptColor}`}>
+                                    {task.assignee}
+                                  </span>
+                                  <div className="flex items-center gap-0.5 text-[10px] text-slate-400 font-mono">
+                                    <Calendar className="h-3.5 w-3.5" />
+                                    <span className={isLate ? 'text-rose-500 font-bold' : ''}>{task.dueDate}</span>
+                                  </div>
+                                  
+                                  {/* 最優先時の強調バッジ */}
+                                  {task.isHighPriority && (
+                                    <span className="bg-amber-100 text-amber-800 text-[8px] font-extrabold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 animate-pulse">
+                                      ⭐ 最優先
+                                    </span>
+                                  )}
+                                </div>
+
+                                <h4 className="font-extrabold text-sm text-slate-800 leading-snug">{task.title}</h4>
+                                
+                                {task.description && (
+                                  <p className="text-[11px] text-slate-500 leading-relaxed whitespace-pre-wrap bg-slate-50 border border-slate-100 rounded-lg p-2.5 shadow-inner">
+                                    {task.description}
+                                  </p>
+                                )}
+                              </div>
+
+                              {/* 時系列進捗メモセクション */}
+                              <div className="bg-slate-50/50 border border-slate-150 rounded-xl p-3 space-y-2">
+                                <div className="flex justify-between items-center pb-1.5 border-b border-slate-200">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                                    <Clock className="h-3 w-3" /> 状況時系列メモ
+                                  </span>
+                                  {addingLogTaskId !== task.id && !isCompleted && (
+                                    <button 
+                                      onClick={() => {
+                                        setAddingLogTaskId(task.id);
+                                        setNewLogText('');
+                                        setNewLinkLabel('');
+                                        setNewLinkUrl('');
+                                        setNewLogTo('');
+                                        setNewLogDueDate('');
+                                      }}
+                                      className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5"
+                                    >
+                                      <Plus className="h-3 w-3" /> メモ追記
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* インライン時系列メモ追加フォーム */}
+                                {addingLogTaskId === task.id && (
+                                  <div className="bg-white border border-indigo-100 rounded-lg p-2.5 space-y-2.5 text-xs shadow-sm">
+                                    <textarea 
+                                      value={newLogText} 
+                                      onChange={e => setNewLogText(e.target.value)} 
+                                      placeholder="最新の状況メモを記入..."
+                                      className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 text-xs text-slate-700 focus:outline-none" 
+                                      rows={2} 
+                                    />
+                                    
+                                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                      <div>
+                                        <label className="block text-slate-400 font-bold mb-0.5">TO (担当)</label>
+                                        <select value={newLogTo} onChange={e=>setNewLogTo(e.target.value)} className="w-full border border-slate-200 rounded p-1 bg-white">
+                                          <option value="">指定なし</option>
+                                          <option value="自分 (事務)">自分 (事務)</option>
+                                          <option value="営業 (山田)">営業 (山田)</option>
+                                          <option value="経理 (田中)">経理 (田中)</option>
+                                          <option value="法務 (鈴木)">法務 (鈴木)</option>
+                                          <option value="システム (伊藤)">システム (伊藤)</option>
+                                          <option value="全員">全員</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-slate-400 font-bold mb-0.5">期日</label>
+                                        <input type="date" value={newLogDueDate} onChange={e=>setNewLogDueDate(e.target.value)} className="w-full border border-slate-200 rounded p-0.5 font-mono" />
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-1 text-[9px] border-t border-slate-100 pt-2">
+                                      <LinkIcon className="h-3 w-3 text-slate-400 shrink-0" />
+                                      <input type="text" placeholder="リンク名(任意)" value={newLinkLabel} onChange={e=>setNewLinkLabel(e.target.value)} className="w-20 border border-slate-200 rounded px-1.5 py-0.5" />
+                                      <input type="text" placeholder="URL(任意)" value={newLinkUrl} onChange={e=>setNewLinkUrl(e.target.value)} className="flex-1 border border-slate-200 rounded px-1.5 py-0.5" />
+                                    </div>
+                                    <div className="flex justify-end gap-1.5 mt-1 pt-1.5 border-t border-slate-100">
+                                      <button onClick={() => setAddingLogTaskId(null)} className="text-[9px] text-slate-400 px-2 py-0.5">閉じる</button>
+                                      <button onClick={() => addLog(task.id)} className="text-[9px] bg-indigo-600 text-white px-2.5 py-0.5 rounded font-bold">追加</button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* メモ履歴の一覧 (新しいものが上) */}
+                                <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1 scrollbar-thin">
+                                  {sortedLogs.length > 0 ? (
+                                    sortedLogs.map(log => {
+                                      const isEditingThisLog = editingLogId === log.id;
+
+                                      return (
+                                        <div 
+                                          key={log.id} 
+                                          className={`group/log relative border rounded-lg p-2.5 shadow-xs transition flex flex-col gap-1.5 ${
+                                            log.completed ? 'opacity-40 bg-emerald-50/10 border-emerald-100' : 
+                                            log.isHighlighted ? 'bg-amber-50/60 border-amber-200 ring-1 ring-amber-300/30' : 'bg-white border-slate-150'
+                                          }`}
+                                        >
+                                          {/* --- メモ単体の編集モード --- */}
+                                          {isEditingThisLog ? (
+                                            <div className="space-y-2 text-xs w-full bg-slate-50/50 p-2 rounded-lg border border-slate-200">
+                                              <span className="font-bold text-[10px] text-indigo-600 block">✏️ メモを編集</span>
+                                              <textarea 
+                                                value={editLogText} 
+                                                onChange={e => setEditLogText(e.target.value)}
+                                                className="w-full bg-white border border-slate-300 rounded p-1.5 text-xs text-slate-700 focus:outline-none"
+                                                rows={2}
+                                              />
+                                              
+                                              <div className="grid grid-cols-2 gap-2 text-[9px]">
+                                                <div>
+                                                  <label className="block text-slate-400 font-bold mb-0.5">TO (担当)</label>
+                                                  <select value={editLogTo} onChange={e=>setEditLogTo(e.target.value)} className="w-full border border-slate-200 bg-white p-0.5">
+                                                    <option value="">指定なし</option>
+                                                    <option value="自分 (事務)">自分 (事務)</option>
+                                                    <option value="営業 (山田)">営業 (山田)</option>
+                                                    <option value="経理 (田中)">経理 (田中)</option>
+                                                    <option value="法務 (鈴木)">法務 (鈴木)</option>
+                                                    <option value="システム (伊藤)">システム (伊藤)</option>
+                                                    <option value="全員">全員</option>
+                                                  </select>
+                                                </div>
+                                                <div>
+                                                  <label className="block text-slate-400 font-bold mb-0.5">期日</label>
+                                                  <input type="date" value={editLogDueDate} onChange={e=>setEditLogDueDate(e.target.value)} className="w-full border border-slate-200 p-0.5 font-mono" />
+                                                </div>
+                                              </div>
+
+                                              <div className="flex items-center gap-1 text-[9px] border-t border-slate-200 pt-1.5">
+                                                <LinkIcon className="h-3 w-3 text-slate-400 shrink-0" />
+                                                <input type="text" placeholder="リンク名" value={editLogLinkLabel} onChange={e=>setEditLogLinkLabel(e.target.value)} className="w-16 border border-slate-200 rounded px-1 py-0.5" />
+                                                <input type="text" placeholder="URL" value={editLogLinkUrl} onChange={e=>setEditLogLinkUrl(e.target.value)} className="flex-1 border border-slate-200 rounded px-1 py-0.5" />
+                                              </div>
+
+                                              <div className="flex justify-end gap-1.5 pt-1.5 border-t border-slate-200">
+                                                <button onClick={() => setEditingLogId(null)} className="text-[9px] text-slate-500 px-2 py-0.5">キャンセル</button>
+                                                <button onClick={() => saveLogEdit(task.id, log.id)} className="text-[9px] bg-indigo-600 text-white px-3 py-0.5 rounded font-bold">更新</button>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            // --- メモ通常表示 ---
+                                            <>
+                                              <div className="flex justify-between items-center border-b border-slate-100 pb-1">
+                                                <span className="text-[8px] font-mono text-slate-400 flex items-center gap-0.5">
+                                                  <Clock className="h-2 w-2"/> {log.date}
+                                                  {log.isHighlighted && <span className="ml-1 text-amber-600 font-bold">📌 ピン留め中</span>}
+                                                </span>
+                                                
+                                                {/* 操作ボタン */}
+                                                <div className="opacity-0 group-hover/log:opacity-100 transition flex items-center gap-1 bg-white/95 rounded border border-slate-100 px-1 py-0.5 z-10 shadow-xs">
+                                                  <button 
+                                                    onClick={() => startEditingLog(log)}
+                                                    className="p-0.5 text-slate-400 hover:text-indigo-600 rounded transition"
+                                                    title="メモを編集"
+                                                  >
+                                                    <Edit2 className="h-2.5 w-2.5" />
+                                                  </button>
+                                                  <button 
+                                                    onClick={() => toggleLogHighlight(task.id, log.id)}
+                                                    className={`p-0.5 rounded transition ${log.isHighlighted ? 'text-amber-500 bg-amber-50' : 'text-slate-400 hover:text-amber-500'}`}
+                                                    title={log.isHighlighted ? 'ピン留め解除' : '重要メモとしてピン留め'}
+                                                  >
+                                                    <Pin className="h-2.5 w-2.5" />
+                                                  </button>
+                                                  <button onClick={() => toggleLogComplete(task.id, log.id)} className="p-0.5 text-slate-400 hover:text-emerald-600 transition" title="完了マーク">
+                                                    <Check className="h-2.5 w-2.5" />
+                                                  </button>
+                                                  <button onClick={() => deleteLog(task.id, log.id)} className="p-0.5 text-slate-400 hover:text-rose-500 transition" title="メモ削除">
+                                                    <Trash2 className="h-2.5 w-2.5" />
+                                                  </button>
+                                                </div>
+                                              </div>
+
+                                              <p className={`text-[11px] text-slate-600 leading-relaxed ${log.completed ? 'line-through text-slate-400 font-medium' : ''}`}>{log.text}</p>
+                                              
+                                              {/* TO、期日、URL表示 ＆ 個別削除ボタン */}
+                                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                                {log.to && (
+                                                  <span className="inline-flex items-center gap-1 text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 transition">
+                                                    <span>TO: {log.to}</span>
+                                                    {!isCompleted && (
+                                                      <button onClick={() => clearLogField(task.id, log.id, 'to')} className="text-slate-400 hover:text-rose-600 font-extrabold text-[10px] ml-1">×</button>
+                                                    )}
+                                                  </span>
+                                                )}
+
+                                                {log.dueDate && (
+                                                  <span className="inline-flex items-center gap-1 text-[9px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded border border-rose-100 transition font-mono">
+                                                    <span>期日: {log.dueDate}</span>
+                                                    {!isCompleted && (
+                                                      <button onClick={() => clearLogField(task.id, log.id, 'dueDate')} className="text-rose-400 hover:text-rose-600 font-extrabold text-[10px] ml-1">×</button>
+                                                    )}
+                                                  </span>
+                                                )}
+
+                                                {log.link && (
+                                                  <span className="inline-flex items-center gap-1 text-[9px] bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 transition">
+                                                    <a href={log.link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5">
+                                                      <ExternalLink className="h-2.5 w-2.5" /> {log.link.label}
+                                                    </a>
+                                                    {!isCompleted && (
+                                                      <button onClick={() => clearLogField(task.id, log.id, 'link')} className="text-indigo-400 hover:text-rose-600 font-extrabold text-[10px] ml-1">×</button>
+                                                    )}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </>
+                                          )}
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <p className="text-[9px] text-slate-400 italic text-center py-2">時系列メモはまだありません</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* 操作フッター */}
+                              <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center">
+                                {/* クイック重要度変更 */}
+                                <button 
+                                  onClick={() => toggleTaskPriority(task.id)}
+                                  className={`text-[10px] font-bold px-2 py-1 rounded transition flex items-center gap-1 ${
+                                    task.isHighPriority 
+                                      ? 'text-amber-700 bg-amber-100 border border-amber-200' 
+                                      : 'text-slate-400 hover:text-amber-600'
+                                  }`}
+                                >
+                                  <Flag className="h-3 w-3 fill-current" />
+                                  {task.isHighPriority ? '最優先' : '優先度を上げる'}
+                                </button>
+
+                                <div className="flex gap-2">
+                                  {task.status === 'pending' && task.isMyTask && (
+                                    <button onClick={() => changeTaskStatus(task.id, 'in_progress')} className="text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-600 hover:text-white px-3 py-1.5 rounded-lg transition flex items-center gap-1 shadow-xs">
+                                      <PlayCircle className="h-3.5 w-3.5" /> 着手する
+                                    </button>
+                                  )}
+                                  {isInProgress && task.isMyTask && (
+                                    <button onClick={() => changeTaskStatus(task.id, 'completed')} className="text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-500 px-3 py-1.5 rounded-lg transition flex items-center gap-1 shadow-md shadow-emerald-100">
+                                      <Check className="h-3.5 w-3.5" /> 完了にする
+                                    </button>
+                                  )}
+                                  {!task.isMyTask && !isCompleted && (
+                                    <button onClick={() => changeTaskStatus(task.id, 'completed')} className="text-[10px] text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 px-2.5 py-1.5 rounded-lg">
+                                      確認完了
+                                    </button>
+                                  )}
+                                  {isCompleted && (
+                                    <button onClick={() => changeTaskStatus(task.id, 'in_progress')} className="text-[10px] text-slate-400 hover:text-slate-600 underline">
+                                      戻す
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="col-span-2 text-center py-8 text-slate-400 text-xs">
+                      タスクが登録されていません。右上の「＋タスク追加」から作成してください。
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            );
+          })}
+        </div>
+
+      </main>
+    </div>
+  );
+}
